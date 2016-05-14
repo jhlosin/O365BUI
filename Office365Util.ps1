@@ -124,7 +124,6 @@ function BulkNewOrUpdate-MsolUser {
 
 function BulkRemove-MsolUser {
     #HERE : 
-    #TODO : log using the function bottom ?
     <#
 	.SYNOPSIS
         It will forcefully remove Windows Azure MsolUsers for the user given in the csv.
@@ -150,18 +149,19 @@ function BulkRemove-MsolUser {
 		# for each user in users
         foreach ($user in $users)
         {
+            $userName = $user.userPrincipalName
             Try {
                 Remove-MsolUser -UserPrincipalName $user.userPrincipalName -Force:$true -ErrorAction stop
-                $successMessage = "the user" + $user.userPrincipalName + "has been removed."
-                Write-Host $successMessage -ForegroundColor DarkGreen
-                $successMessage | Out-File $csvFolder"\Log_BulkRemove-MsolUser-"$nowString".txt" -Append
+                $successMessage = "the user" + $userName + "has been removed."
+                Write-Log -Message $successMessage -Path $csvFolder"\Log_BulkRemove-MsolUser-"$nowString".log"
             } Catch {
-                Write-Warning "Error occured: $_"
-                $_ | Out-File $csvFolder"\Log_BulkRemove-MsolUser-"$nowString".txt" -Append
+                #Write-Warning "Error occured: $_"
+                #$_ | Out-File $csvFolder"\Log_BulkRemove-MsolUser-"$nowString".txt" -Append
+                Write-Log -Message "The user, $userName, does not exist" -Path $csvFolder"\Log_BulkRemove-MsolUser-"$nowString".log" -Level error
             }
         }
 
-        Write-host "The process has been finished. Log has been saved in the csv folder as Log_BulkRemove-MsolUser.txt."
+        Write-host "The process has been finished. Log has been saved in the csv folder as Log_BulkRemove-MsolUser.txt." -ForegroundColor Yellow
 	}
 }
 
