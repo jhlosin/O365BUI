@@ -17,7 +17,6 @@ function Connect-Office365
     connect-MsolService -credential $LiveCred
 }
 
-
 ######################################
 #                                    #
 #       MSOL Services Util           # 
@@ -45,7 +44,7 @@ function BulkNewOrUpdate-MsolUser {
         PostalCode
         Country
         UsageLocation
-        Manager
+        Manager 
         Company
 		
 	.PARAMETER CsvLocation
@@ -85,19 +84,32 @@ function BulkNewOrUpdate-MsolUser {
             $thisUser = Get-MsolUser -UserPrincipalName $UserParams.UserPrincipalName -ErrorAction SilentlyContinue
             # if thisUser does not exist
             if (!$thisUser) {
-	            # create a new msol user
-                Write-Host ("creating a new msoluser " + $UserParams.DisplayName)
-                New-MsolUser @UserParams
+	            try {
+                    # create a new msol user
+                    Write-Host ("creating a new msoluser " + $UserParams.DisplayName)
+                    New-MsolUser @UserParams -ErrorAction Stop
+                } catch {
+                    Write-Host "Error>>>>" + $_
+                }
 	        }
 
             # if already exist
             if ($thisUser) {
-                # update attributes.
-                Write-Host ("The user " + $UserParams.DisplayName + " already exists. trying to update attritbutes")
-                set-MsolUser @UserParams
+                try {
+                    # update attributes.
+                    Write-Host ("The user " + $UserParams.DisplayName + " already exists. trying to update attritbutes")
+                    $successMessage = ("The user " + $UserParams.DisplayName + " already exists. trying to update attritbutes")
+                    Write-Log -Message $successMessage -Path $csvFolder"\Log_BulkRemove-MsolUser-"$nowString".log"
+                    set-MsolUser @UserParams -ErrorAction Stop
         
-                # add the license you selected prior
-                Set-MsolUserLicense -UserPrincipalName $thisUser.UserPrincipalName -AddLicenses $license -ErrorAction SilentlyContinue
+                    # add the license you selected prior
+                    Set-MsolUserLicense -UserPrincipalName $thisUser.UserPrincipalName -AddLicenses $license -ErrorAction Stop
+                    $successMessage = ("The user " + $UserParams.DisplayName + " already exists. trying to update attritbutes")
+                    Write-Log -Message $successMessage -Path $csvFolder"\Log_BulkRemove-MsolUser-"$nowString".log"
+                    Write-Log -Message $successMessage -Path $csvFolder"\Log_BulkRemove-MsolUser-"$nowString".log"
+                } catch {
+                    Write-Host "Error>>>>" + $_
+                }
             }
 
             # max company attribute is 64, cut it if it is longer than 64
@@ -123,7 +135,6 @@ function BulkNewOrUpdate-MsolUser {
 }
 
 function BulkRemove-MsolUser {
-    #HERE : 
     <#
 	.SYNOPSIS
         It will forcefully remove Windows Azure MsolUsers for the user given in the csv.
@@ -133,7 +144,7 @@ function BulkRemove-MsolUser {
         UserPrincipalName(required)
 		
 	.PARAMETER CsvLocation
-	 	Location of the CSV file of users you want to import
+	 	Location of the CSV file of users you want to remove
 	#>
     [CmdletBinding()]
 	param (
@@ -162,6 +173,64 @@ function BulkRemove-MsolUser {
         }
 
         Write-host "The process has been finished. Log has been saved in the csv folder as Log_BulkRemove-MsolUser.txt." -ForegroundColor Yellow
+	}
+}
+
+function BulkSet-MsolLicense {
+    <#
+	.SYNOPSIS
+        It will assign license you select for the user given in the csv or all user mailboxes.
+	.EXAMPLE
+		PS> BulkSet-MsolLicense -CsvLocation 'C:\users.csv'
+        ===List of Properties(column) in CSV===
+        UserPrincipalName(required)
+
+        This below will assign a license selected for all user mailboxes in the tenant.
+        PS> BulkSet-MsolLicense -AllUserMailboxes
+       		
+	.PARAMETER CsvLocation
+	 	Location of the CSV file of users you want to assign a license with
+	#>
+    [CmdletBinding()]
+	param (
+		[parameter(Mandatory=$false)][string]$CsvLocation,
+
+        [Parameter(Mandatory=$false)][bool]$AllUserMailboxes=$false
+	)
+	process {
+        # import the user list csv to a variable users
+        $license = (Get-MsolAccountSku | Out-GridView -Title "Select the license to assign" -PassThru).AccountSkuId
+        $now = Get-Date
+        $nowString = $now.Month.ToString() +"-"+ $now.Day.ToString() +"-"+ $now.Year.ToString() +" "+ $now.Hour.ToString() +"H "+ $now.Minute.ToString() + "M"
+
+        if ($AllUserMailboxes) {
+            $users = get-mailbox -ResultSize unlimited | Where-Object {$_.recipientTypeDetails -like "UserMailbox"}
+
+        } else {
+            $users = import-csv $CsvLocation
+            $csvFolder = $csvLocation.Substring(0, $CsvLocation.LastIndexOf("\"))
+        }
+		# for each user in users
+        foreach ($user in $users)
+        {
+            $userName = $user.userPrincipalName
+            $CsvLocation
+            Try {
+                # add the license you selected prior
+                if (!$user.UsageLocation) {
+                    set-MsolUser -UserPrincipalName $userName -UsageLocation US
+                }
+                Set-MsolUserLicense -UserPrincipalName $userName -AddLicenses $license -ErrorAction SilentlyContinue
+
+                $successMessage = "the user" + $userName + "has been assigned with a license " + $license
+                Write-Log -Message $successMessage -Path ".\Log_BulkSet-MsolLicense-"$nowString".log"
+            } Catch {
+                # if failed, log the error
+                Write-Log -Message ($_).toString -Path ".\Log_BulkRemove-MsolUser-"$nowString".log" -Level "error"
+            }
+        }
+
+        Write-host "The process has been finished. Log has been saved in Log_BulkSet-MsolLicense.txt." -ForegroundColor Yellow
 	}
 }
 
