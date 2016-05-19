@@ -15,6 +15,10 @@ function Connect-Office365
     Import-PSSession $global:Session365
 
     connect-MsolService -credential $LiveCred
+    
+    #use this to remove/add a msol session
+    #Remove-Module MSOnline
+    #Import-Module MSOnline
 }
 
 ######################################
@@ -57,8 +61,26 @@ function BulkNewOrUpdate-MsolUser {
 	process {
         # import the user list csv to a variable users
         $users = import-csv $CsvLocation
-        # select a license
-        $license = (Get-MsolAccountSku | Out-GridView -Title "Select the license to assign" -PassThru).AccountSkuId
+        $csvFolder = $csvLocation.Substring(0, $CsvLocation.LastIndexOf("\"))
+        $now = Get-Date
+        $nowString = $now.Month.ToString() +"-"+ $now.Day.ToString() +"-"+ $now.Year.ToString() +" "+ $now.Hour.ToString() +"H "+ $now.Minute.ToString() + "M"
+        
+        # option for assigning a license
+        while(1) {
+            $EmailNotification = Read-Host 'do you want to assign a license for users?(y/n)'
+            if ($EmailNotification -eq 'y' -or $EmailNotification -eq 'n') {
+                break
+            } else {
+                Write-Warning "Only y or n is allowed. try again."
+            }
+        }
+        
+        if ($EmailNotification -eq 'y') {
+            #select a license
+            $license = (Get-MsolAccountSku | Out-GridView -Title "Select the license to assign" -PassThru).AccountSkuId
+        } else {
+            $license = ''
+        }
                 
 		# for each user in users
         foreach ($user in $users)
@@ -84,51 +106,67 @@ function BulkNewOrUpdate-MsolUser {
             $thisUser = Get-MsolUser -UserPrincipalName $UserParams.UserPrincipalName -ErrorAction SilentlyContinue
             # if thisUser does not exist
             if (!$thisUser) {
-	            try {
-                    # create a new msol user
-                    Write-Host ("creating a new msoluser " + $UserParams.DisplayName)
-                    New-MsolUser @UserParams -ErrorAction Stop
-                } catch {
-                    Write-Host "Error>>>>" + $_
+                # create a new msol user
+                Write-Host ("creating a new msoluser " + $UserParams.DisplayName)
+                if ($license) {
+                    New-MsolUser @UserParams -ErrorAction SilentlyContinue -LicenseAssignment $license
+                } else {
+                    New-MsolUser @UserParams -ErrorAction SilentlyContinue
                 }
-	        }
-
-            # if already exist
-            if ($thisUser) {
+                
+                
+                
+	        } else { # if already exist
                 try {
                     # update attributes.
-                    Write-Host ("The user " + $UserParams.DisplayName + " already exists. trying to update attritbutes")
-                    $successMessage = ("The user " + $UserParams.DisplayName + " already exists. trying to update attritbutes")
-                    Write-Log -Message $successMessage -Path $csvFolder"\Log_BulkRemove-MsolUser-"$nowString".log"
+                    $message = ("The user " + $UserParams.DisplayName + " already exists. trying to update attritbutes")
+                    Write-Log -Message $message -Path $csvFolder"\Log_BulkNewOrUpdate-MsolUser-"$nowString".log"
                     set-MsolUser @UserParams -ErrorAction Stop
         
-                    # add the license you selected prior
-                    Set-MsolUserLicense -UserPrincipalName $thisUser.UserPrincipalName -AddLicenses $license -ErrorAction Stop
-                    $successMessage = ("The user " + $UserParams.DisplayName + " already exists. trying to update attritbutes")
-                    Write-Log -Message $successMessage -Path $csvFolder"\Log_BulkRemove-MsolUser-"$nowString".log"
-                    Write-Log -Message $successMessage -Path $csvFolder"\Log_BulkRemove-MsolUser-"$nowString".log"
+                    # add the license if you selected prior
+                    if ($license) {
+                        try {
+                            Set-MsolUserLicense -UserPrincipalName $thisUser.UserPrincipalName -AddLicenses $license -ErrorAction Stop
+                            $successMessage = 'A license has been assigned to' + $thisUser.UserPrincipalName
+                            Write-Log -Message $successMessage -Path $csvFolder"\Log_BulkNewOrUpdate-MsolUser-"$nowString".log"
+                        } catch {
+                            $message = 'user-' + $thisUser.UserPrincipalName + ' ' + $_
+                            Write-Log -Message $message -Path $csvFolder"\Log_BulkNewOrUpdate-MsolUser-"$nowString".log" -Level Error
+                        }
+                    }
                 } catch {
-                    Write-Host "Error>>>>" + $_
+                    $message = 'user ' + $thisUser.UserPrincipalName + ' ' + $_
+                    Write-Log -Message $message -Path $csvFolder"\Log_BulkNewOrUpdate-MsolUser-"$nowString".log" -Level Error
                 }
             }
+            
+            ## handle other attributes ##
+            #wait until the user is populated
+                $UPN = $UserParams.UserPrincipalName
+                while (1) {
+                    if($emailUser) {
+                        $message = "The user $UPN has been created"
+                        Write-Log -Message $message -Path $csvFolder"\Log_BulkNewOrUpdate-MsolUser-"$nowString".log" -Level Info
+                        break
+                    } else {
+                        $emailUser = ''
+                        Write-Warning "waiting for the user to be created"
+                        sleep 10
+                        $emailUser = Get-User $UPN -ErrorAction SilentlyContinue
+                    }
+                }
 
             # max company attribute is 64, cut it if it is longer than 64
             if ($user.company.length -gt 64) {
                 ## HERE
                 $user.company = $user.company.Substring(0,63)
             }
-            # set up other attritbutes : BUG gets an error when crating new user. need to wait a bit to populate
+
+            # set up other attritbutes
             if ($user.Manager) {
-            
-            }
-            while( !(Get-User $thisUser.UserPrincipalName) ) {
-                sleep 10
-                Write-Host "waiting for the user to be populated.."
-            }
-            if ($user.Manager) {
-                Set-User -Identity $thisUser.UserPrincipalName -Manager $user.Manager -Company $user.company
+                Set-User -Identity $UPN -Manager $user.Manager -Company $user.company
             } else {
-                Set-User -Identity $thisUser.UserPrincipalName -Company $company
+                Set-User -Identity $UPN -Company $company
             }
         }
 	}
@@ -234,6 +272,8 @@ function BulkSet-MsolLicense {
 	}
 }
 
+function BulkReset-MsolPassword {}
+function BulkEmail-UserPassword {}
 
 ######################################
 #                                    #
