@@ -1,6 +1,6 @@
 ######################################
 #                                    #
-# Initial Connection to Office 365   # 
+# Connection to Office 365   # 
 #                                    #
 ######################################
 
@@ -19,6 +19,16 @@ function Connect-Office365
     #use this to remove/add a msol session
     #Remove-Module MSOnline
     #Import-Module MSOnline
+}
+
+function Disconnect-Office365 {
+    <#
+	.SYNOPSIS
+        Remove connected Office 365 MSOL service and Exchange Online sessions.
+    #>
+    Get-PSSession | Remove-PSSession -Confirm:$false
+    Remove-Module MSOnline
+    Import-Module MSOnline    
 }
 
 ######################################
@@ -62,10 +72,9 @@ function BulkNewOrUpdate-MsolUser {
         # import the user list csv to a variable users
         $users = import-csv $CsvLocation
         $csvFolder = $csvLocation.Substring(0, $CsvLocation.LastIndexOf("\"))
-        $now = Get-Date
-        $nowString = $now.Month.ToString() +"-"+ $now.Day.ToString() +"-"+ $now.Year.ToString() +" "+ $now.Hour.ToString() +"H "+ $now.Minute.ToString() + "M"
+        $currentTime = Get-CurrentDateString
         
-        # option for assigning a license
+        # select option for assigning a license
         while(1) {
             $EmailNotification = Read-Host 'do you want to assign a license for users?(y/n)'
             if ($EmailNotification -eq 'y' -or $EmailNotification -eq 'n') {
@@ -74,10 +83,11 @@ function BulkNewOrUpdate-MsolUser {
                 Write-Warning "Only y or n is allowed. try again."
             }
         }
-        
+        # if you chose y
         if ($EmailNotification -eq 'y') {
             #select a license
             $license = (Get-MsolAccountSku | Out-GridView -Title "Select the license to assign" -PassThru).AccountSkuId
+        # else
         } else {
             $license = ''
         }
@@ -103,7 +113,9 @@ function BulkNewOrUpdate-MsolUser {
                 'UsageLocation' = $user.UsageLocation
             }
 
+            #check if this user already exists in MS online
             $thisUser = Get-MsolUser -UserPrincipalName $UserParams.UserPrincipalName -ErrorAction SilentlyContinue
+            
             # if thisUser does not exist
             if (!$thisUser) {
                 # create a new msol user
@@ -113,14 +125,11 @@ function BulkNewOrUpdate-MsolUser {
                 } else {
                     New-MsolUser @UserParams -ErrorAction SilentlyContinue
                 }
-                
-                
-                
 	        } else { # if already exist
                 try {
                     # update attributes.
                     $message = ("The user " + $UserParams.DisplayName + " already exists. trying to update attritbutes")
-                    Write-Log -Message $message -Path $csvFolder"\Log_BulkNewOrUpdate-MsolUser-"$nowString".log"
+                    Write-Log -Message $message -Path $csvFolder"\Log_BulkNewOrUpdate-MsolUser-"$currentTime".log"
                     set-MsolUser @UserParams -ErrorAction Stop
         
                     # add the license if you selected prior
@@ -128,15 +137,15 @@ function BulkNewOrUpdate-MsolUser {
                         try {
                             Set-MsolUserLicense -UserPrincipalName $thisUser.UserPrincipalName -AddLicenses $license -ErrorAction Stop
                             $successMessage = 'A license has been assigned to' + $thisUser.UserPrincipalName
-                            Write-Log -Message $successMessage -Path $csvFolder"\Log_BulkNewOrUpdate-MsolUser-"$nowString".log"
+                            Write-Log -Message $successMessage -Path $csvFolder"\Log_BulkNewOrUpdate-MsolUser-"$currentTime".log"
                         } catch {
                             $message = 'user-' + $thisUser.UserPrincipalName + ' ' + $_
-                            Write-Log -Message $message -Path $csvFolder"\Log_BulkNewOrUpdate-MsolUser-"$nowString".log" -Level Error
+                            Write-Log -Message $message -Path $csvFolder"\Log_BulkNewOrUpdate-MsolUser-"$currentTime".log" -Level Error
                         }
                     }
                 } catch {
                     $message = 'user ' + $thisUser.UserPrincipalName + ' ' + $_
-                    Write-Log -Message $message -Path $csvFolder"\Log_BulkNewOrUpdate-MsolUser-"$nowString".log" -Level Error
+                    Write-Log -Message $message -Path $csvFolder"\Log_BulkNewOrUpdate-MsolUser-"$currentTime".log" -Level Error
                 }
             }
             
@@ -146,7 +155,7 @@ function BulkNewOrUpdate-MsolUser {
                 while (1) {
                     if($emailUser) {
                         $message = "The user $UPN has been created"
-                        Write-Log -Message $message -Path $csvFolder"\Log_BulkNewOrUpdate-MsolUser-"$nowString".log" -Level Info
+                        Write-Log -Message $message -Path $csvFolder"\Log_BulkNewOrUpdate-MsolUser-"$currentTime".log" -Level Info
                         break
                     } else {
                         $emailUser = ''
@@ -170,6 +179,9 @@ function BulkNewOrUpdate-MsolUser {
             }
         }
 	}
+    end {
+        Write-host "The process has been finished. Log has been saved in Log_BulkNewOrUpdate-MsolUser-"$currentTime".log" -ForegroundColor Yellow
+    }
 }
 
 function BulkRemove-MsolUser {
@@ -192,8 +204,7 @@ function BulkRemove-MsolUser {
         # import the user list csv to a variable users
         $users = import-csv $CsvLocation
         $csvFolder = $csvLocation.Substring(0, $CsvLocation.LastIndexOf("\"))
-        $now = Get-Date
-        $nowString = $now.Month.ToString() +"-"+ $now.Day.ToString() +"-"+ $now.Year.ToString() +" "+ $now.Hour.ToString() +"H "+ $now.Minute.ToString() + "M"
+        $currentTime = Get-CurrentDateString
                 
 		# for each user in users
         foreach ($user in $users)
@@ -202,11 +213,11 @@ function BulkRemove-MsolUser {
             Try {
                 Remove-MsolUser -UserPrincipalName $user.userPrincipalName -Force:$true -ErrorAction stop
                 $successMessage = "the user" + $userName + "has been removed."
-                Write-Log -Message $successMessage -Path $csvFolder"\Log_BulkRemove-MsolUser-"$nowString".log"
+                Write-Log -Message $successMessage -Path $csvFolder"\Log_BulkRemove-MsolUser-"$currentTime".log"
             } Catch {
                 #Write-Warning "Error occured: $_"
                 #$_ | Out-File $csvFolder"\Log_BulkRemove-MsolUser-"$nowString".txt" -Append
-                Write-Log -Message "The user, $userName, does not exist" -Path $csvFolder"\Log_BulkRemove-MsolUser-"$nowString".log" -Level error
+                Write-Log -Message "The user, $userName, does not exist" -Path $csvFolder"\Log_BulkRemove-MsolUser-"$currentTime".log" -Level error
             }
         }
 
@@ -238,8 +249,7 @@ function BulkSet-MsolLicense {
 	process {
         # import the user list csv to a variable users
         $license = (Get-MsolAccountSku | Out-GridView -Title "Select the license to assign" -PassThru).AccountSkuId
-        $now = Get-Date
-        $nowString = $now.Month.ToString() +"-"+ $now.Day.ToString() +"-"+ $now.Year.ToString() +" "+ $now.Hour.ToString() +"H "+ $now.Minute.ToString() + "M"
+        $currentTime = Get-CurrentDateString
 
         if ($AllUserMailboxes) {
             $users = get-mailbox -ResultSize unlimited | Where-Object {$_.recipientTypeDetails -like "UserMailbox"}
@@ -261,10 +271,10 @@ function BulkSet-MsolLicense {
                 Set-MsolUserLicense -UserPrincipalName $userName -AddLicenses $license -ErrorAction SilentlyContinue
 
                 $successMessage = "the user" + $userName + "has been assigned with a license " + $license
-                Write-Log -Message $successMessage -Path ".\Log_BulkSet-MsolLicense-"$nowString".log"
+                Write-Log -Message $successMessage -Path ".\Log_BulkSet-MsolLicense-"$currentTime".log"
             } Catch {
                 # if failed, log the error
-                Write-Log -Message ($_).toString -Path ".\Log_BulkRemove-MsolUser-"$nowString".log" -Level "error"
+                Write-Log -Message ($_).toString -Path ".\Log_BulkRemove-MsolUser-"$currentTime".log" -Level "error"
             }
         }
 
@@ -304,23 +314,36 @@ function BulkNew-MailContact {
 	process {
         # import the user list csv to a variable users
         $users = import-csv $CsvLocation
+        $currentTime = Get-CurrentDateString
 		
 		# for each user in users
         foreach ($item in $items)
         {
             $thisUser = Get-MailContact $item.name -ErrorAction SilentlyContinue
             if (!$thisUser) {
-                Write-Host ("creating " + $item.name)
-                New-MailContact -Name $item.name -ExternalEmailAddress $item.ExternalEmailAddress -DisplayName $item.name -FirstName $item.firstName -LastName $item.lastName
+                try {
+                    New-MailContact -Name $item.name -ExternalEmailAddress $item.ExternalEmailAddress -DisplayName $item.name -FirstName $item.firstName -LastName $item.lastName
+                    $message = $item.name + " has been created."
+                    Write-Host $message
+                    Write-Log -Message $message -Path $csvFolder"\Log_BulkNew-MailContact-"$currentTime".log" -Level Error
+                } catch {
+                    Write-Log -Message $_ -Path $csvFolder"\Log_BulkNew-MailContact-"$currentTime".log" -Level Error
+                }
+                
             } else {
-                Write-Host ("The contact " + $item.name + " already exists. skipping...")
+                $message = "The contact " + $item.name + " already exists. skipping..."
+                Write-Host $message
+                Write-Log -Message $message -Path $csvFolder"\Log_BulkNew-MailContact-"$currentTime".log" -Level Error
             }
         }
 	}
+    end {
+        Write-host "The process has been finished. Log has been saved in Log_BulkNew-MailContact-"$currentTime".log" -ForegroundColor Yellow
+    }
 }
 
 
-function BulkUpdate-ProxyAddresses {
+function BulkUpdate-ProxyAddresses { ## HERE
     <#
 	.SYNOPSIS
         It will update proxy address for Dale Carnegie for mailboxes in a given csv.
@@ -341,6 +364,7 @@ function BulkUpdate-ProxyAddresses {
 	process {
         # import the user list csv to a variable users
         $mailboxes = import-csv $CsvLocation
+        $currentTime = Get-CurrentDateString
 		
 		# for each user in users
         foreach ($mailbox in $mailboxes)
@@ -364,10 +388,6 @@ function BulkUpdate-ProxyAddresses {
                 #[string[]]$tempProxy = $proxyAddresses | out-string -stream
 
                 # add additional aliases for dalecarnegie domains
-                #$alias1 = "smtp:$(($thisUser.FirstName).toLower() +"_" + ($thisUser.lastName).toLower())@dalecarnegie.com"
-                #$alias2 = "smtp:$(($thisUser.FirstName).toLower() +"_" + ($thisUser.lastName).toLower())@dale-carnegie.com"
-                #$alias3 = "smtp:$(($thisUser.FirstName).toLower() +"." + ($thisUser.lastName).toLower())@dalecarnegie.edu"
-                #$alias4 = "smtp:$(($thisUser.FirstName).toLower() +"." + ($thisUser.lastName).toLower())@dale-carnegie.com"
                 $alias1 = "smtp:$(($thisUser.FirstName) +"_" + ($thisUser.lastName))@dalecarnegie.com"
                 $alias2 = "smtp:$(($thisUser.FirstName) +"_" + ($thisUser.lastName))@dale-carnegie.com"
                 $alias3 = "smtp:$(($thisUser.FirstName) +"." + ($thisUser.lastName))@dalecarnegie.edu"
@@ -499,51 +519,56 @@ function Check-MailboxExistence {
 #                                    #
 ######################################
 
+function Get-CurrentDateString {
+    $now = Get-Date
+    $currentTimeString = $now.Year.ToString() + "-" + $now.Month.ToString() +"-"+ $now.Day.ToString() +" "+ $now.Hour.ToString() +"h"+ $now.Minute.ToString() + 'm'
+    return $currentTimeString
+}
 
-<# 
-.Synopsis 
-   Write-Log writes a message to a specified log file with the current time stamp. 
-.DESCRIPTION 
-   The Write-Log function is designed to add logging capability to other scripts. 
-   In addition to writing output and/or verbose you can write to a log file for 
-   later debugging. 
-.NOTES 
-   Created by: Jason Wasser @wasserja 
-   Modified: 11/24/2015 09:30:19 AM   
- 
-   Changelog: 
-    * Code simplification and clarification - thanks to @juneb_get_help 
-    * Added documentation. 
-    * Renamed LogPath parameter to Path to keep it standard - thanks to @JeffHicks 
-    * Revised the Force switch to work as it should - thanks to @JeffHicks 
- 
-   To Do: 
-    * Add error handling if trying to create a log file in a inaccessible location. 
-    * Add ability to write $Message to $Verbose or $Error pipelines to eliminate 
-      duplicates. 
-.PARAMETER Message 
-   Message is the content that you wish to add to the log file.  
-.PARAMETER Path 
-   The path to the log file to which you would like to write. By default the function will  
-   create the path and file if it does not exist.  
-.PARAMETER Level 
-   Specify the criticality of the log information being written to the log (i.e. Error, Warning, Informational) 
-.PARAMETER NoClobber 
-   Use NoClobber if you do not wish to overwrite an existing file. 
-.EXAMPLE 
-   Write-Log -Message 'Log message'  
-   Writes the message to c:\Logs\PowerShellLog.log. 
-.EXAMPLE 
-   Write-Log -Message 'Restarting Server.' -Path c:\Logs\Scriptoutput.log 
-   Writes the content to the specified log file and creates the path and file specified.  
-.EXAMPLE 
-   Write-Log -Message 'Folder does not exist.' -Path c:\Logs\Script.log -Level Error 
-   Writes the message to the specified log file as an error message, and writes the message to the error pipeline. 
-.LINK 
-   https://gallery.technet.microsoft.com/scriptcenter/Write-Log-PowerShell-999c32d0 
-#> 
 function Write-Log 
 { 
+    <# 
+    .Synopsis 
+       Write-Log writes a message to a specified log file with the current time stamp. 
+    .DESCRIPTION 
+       The Write-Log function is designed to add logging capability to other scripts. 
+       In addition to writing output and/or verbose you can write to a log file for 
+       later debugging. 
+    .NOTES 
+       Created by: Jason Wasser @wasserja 
+       Modified: 11/24/2015 09:30:19 AM   
+ 
+       Changelog: 
+        * Code simplification and clarification - thanks to @juneb_get_help 
+        * Added documentation. 
+        * Renamed LogPath parameter to Path to keep it standard - thanks to @JeffHicks 
+        * Revised the Force switch to work as it should - thanks to @JeffHicks 
+ 
+       To Do: 
+        * Add error handling if trying to create a log file in a inaccessible location. 
+        * Add ability to write $Message to $Verbose or $Error pipelines to eliminate 
+          duplicates. 
+    .PARAMETER Message 
+       Message is the content that you wish to add to the log file.  
+    .PARAMETER Path 
+       The path to the log file to which you would like to write. By default the function will  
+       create the path and file if it does not exist.  
+    .PARAMETER Level 
+       Specify the criticality of the log information being written to the log (i.e. Error, Warning, Informational) 
+    .PARAMETER NoClobber 
+       Use NoClobber if you do not wish to overwrite an existing file. 
+    .EXAMPLE 
+       Write-Log -Message 'Log message'  
+       Writes the message to c:\Logs\PowerShellLog.log. 
+    .EXAMPLE 
+       Write-Log -Message 'Restarting Server.' -Path c:\Logs\Scriptoutput.log 
+       Writes the content to the specified log file and creates the path and file specified.  
+    .EXAMPLE 
+       Write-Log -Message 'Folder does not exist.' -Path c:\Logs\Script.log -Level Error 
+       Writes the message to the specified log file as an error message, and writes the message to the error pipeline. 
+    .LINK 
+       https://gallery.technet.microsoft.com/scriptcenter/Write-Log-PowerShell-999c32d0 
+    #> 
     [CmdletBinding()] 
     Param 
     ( 
