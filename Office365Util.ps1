@@ -4,8 +4,7 @@
 #                                    #
 ######################################
 
-function Connect-Office365
-{
+function Connect-Office365 {
     <#
 	.SYNOPSIS
         Connect Office 365 MSOL service and Exchange Online.
@@ -13,12 +12,7 @@ function Connect-Office365
     $LiveCred = get-credential
     $global:Session365 = New-PSSession -ConfigurationName Microsoft.Exchange -ConnectionUri https://ps.outlook.com/powershell -Credential $LiveCred -Authentication basic -AllowRedirection
     Import-PSSession $global:Session365
-
     connect-MsolService -credential $LiveCred
-    
-    #use this to remove/add a msol session
-    #Remove-Module MSOnline
-    #Import-Module MSOnline
 }
 
 function Disconnect-Office365 {
@@ -70,7 +64,12 @@ function BulkNewOrUpdate-MsolUser {
 	)
 	process {
         # import the user list csv to a variable users
-        $users = import-csv $CsvLocation
+        try {
+            $users = import-csv $CsvLocation
+        } catch {
+           Write-Warning "The csv file does not exist. Please try again."
+           return 
+        }
         $csvFolder = $csvLocation.Substring(0, $CsvLocation.LastIndexOf("\"))
         $currentTime = Get-CurrentDateString
         
@@ -233,7 +232,6 @@ function BulkSet-MsolLicense {
 		PS> BulkSet-MsolLicense -CsvLocation 'C:\users.csv'
         ===List of Properties(column) in CSV===
         UserPrincipalName(required)
-
         This below will assign a license selected for all user mailboxes in the tenant.
         PS> BulkSet-MsolLicense -AllUserMailboxes
        		
@@ -282,8 +280,103 @@ function BulkSet-MsolLicense {
 	}
 }
 
-function BulkReset-MsolPassword {}
-function BulkEmail-UserPassword {}
+function BulkReset-MsolPassword {
+    <#
+	.SYNOPSIS
+        It will reset passwords for the user(s) given in the csv.
+	.EXAMPLE
+		PS> BulkReset-MsolPassword -CsvLocation 'C:\msolusers.csv'
+        ===List of Properties(column) in CSV===
+        UserPrincipalName(required)
+		
+	.PARAMETER CsvLocation
+	 	Location of the CSV file of users you want to remove
+	#>
+    [CmdletBinding()]
+	param (
+		[parameter(Mandatory=$true)][string]$CsvLocation
+	)
+	process {
+        # import the user list csv to a variable users
+        try {
+            $users = import-csv $CsvLocation
+        } catch {
+           Write-Warning "The csv file does not exist. Please try again."
+           return 
+        }
+        $csvFolder = $csvLocation.Substring(0, $CsvLocation.LastIndexOf("\"))
+        $currentTime = Get-CurrentDateString
+        
+        # select option for assigning a license
+        while(1) {
+            $setRandomPassword = Read-Host 'Do you want to set random passwords or a generic one for all users?(r for Random/g for generic)'
+            $forceChangePassword = Read-Host 'Do you want users to change their password at the next login?(y/n)'
+            if ( ($setRandomPassword -eq 'r' -or $setRandomPassword -eq 'g') -and ($forceChangePassword -eq 'y' -or $forceChangePassword -eq 'n') ) {
+                break
+            } else {
+                Write-Warning "not allowed input. try again."
+            }
+        }
+                
+		# for each user in users
+        foreach ($user in $users)
+        {
+            # if you chose r(random)
+            if ($setRandomPassword -eq 'r') {
+                if ($forceChangePassword -eq 'y') {
+                    try {
+                        $password = Set-MsolUserPassword -UserPrincipalName $user.userPrincipalName -ForceChangePassword:$true 
+                        $password | select-object @{label='UserPrincipalName'; Expression={$user.userPrincipalName}}, @{label='password'; Expression={$_}} `
+                            | export-csv MSOLUserNewPasswords.csv -NoTypeInformation -Append
+                        $message = 'password for ' + $user.UserPrincipalName +  ' has been reset.'
+                        Write-Log -Message $message -Path $csvFolder"\Log_BulkSet-MsolLicense-"$currentTime".log"
+                    } catch {
+                        Write-Log -Message $_ -Path $csvFolder"\Log_BulkSet-MsolLicense-"$currentTime".log" -Level Error
+                    }
+                } else {
+                    try {
+                        $password = Set-MsolUserPassword -UserPrincipalName $user.userPrincipalName
+                        $password | select-object @{label='UserPrincipalName'; Expression={$user.userPrincipalName}}, @{label='password'; Expression={$_}} `
+                            | export-csv MSOLUserNewPasswords.csv -NoTypeInformation -Append
+                        $message = 'password for ' + $user.UserPrincipalName +  ' has been reset.'
+                        Write-Log -Message $message -Path $csvFolder"\Log_BulkSet-MsolLicense-"$currentTime".log"
+                    } catch {
+                        Write-Log -Message $_ -Path $csvFolder"\Log_BulkSet-MsolLicense-"$currentTime".log" -Level Error
+                    }
+                }
+            # for g(generic)
+            } else {
+                $newPassword = Read-Host 'put the new password for all users. it should be combination of number and alphabet with at least one Capital and at least 8 characters length.(e.g People12)'
+                if ($forceChangePassword -eq 'y') {
+                    try {
+                        $password = Set-MsolUserPassword -UserPrincipalName $user.userPrincipalName -ForceChangePassword:$true -NewPassword $newPassword
+                        $password | select-object @{label='UserPrincipalName'; Expression={$user.userPrincipalName}}, @{label='password'; Expression={$_}} | export-csv MSOLUserNewPasswords.csv -NoTypeInformation -Append
+                        $message = 'password for ' + $user.UserPrincipalName +  ' has been reset.'
+                        Write-Log -Message $message -Path $csvFolder"\Log_BulkSet-MsolLicense-"$currentTime".log"
+                    } catch {
+                        Write-Log -Message $_ -Path $csvFolder"\Log_BulkSet-MsolLicense-"$currentTime".log" -Level Error
+                    }
+                } else {
+                    try {
+                        $password = Set-MsolUserPassword -UserPrincipalName $user.userPrincipalName -NewPassword $newPassword
+                        $password | select-object @{label='UserPrincipalName'; Expression={$user.userPrincipalName}}, @{label='password'; Expression={$_}} | export-csv MSOLUserNewPasswords.csv -NoTypeInformation -Append
+                        $message = 'password for ' + $user.UserPrincipalName +  ' has been reset.'
+                        Write-Log -Message $message -Path $csvFolder"\Log_BulkSet-MsolLicense-"$currentTime".log"
+                    } catch {
+                        Write-Log -Message $_ -Path $csvFolder"\Log_BulkSet-MsolLicense-"$currentTime".log" -Level Error
+                    }
+                }
+            }
+        }
+	}
+    end {
+        Write-host "The process has been finished. Log has been saved in Log_BulkSet-MsolLicense-"$currentTime".log" -ForegroundColor Yellow
+        Write-host "The password info is saved on MSOLUserNewPasswords.csv" -ForegroundColor Yellow
+    }
+}
+
+
+function BulkEmail-UserPassword {} #HERE
 
 ######################################
 #                                    #
@@ -313,19 +406,24 @@ function BulkNew-MailContact {
 	)
 	process {
         # import the user list csv to a variable users
-        $users = import-csv $CsvLocation
+        try {
+            $users = import-csv $CsvLocation
+        } catch {
+           Write-Warning "The csv file does not exist. Please try again."
+           return 
+        }
         $currentTime = Get-CurrentDateString
 		
 		# for each user in users
-        foreach ($item in $items)
+        foreach ($item in $users)
         {
             $thisUser = Get-MailContact $item.name -ErrorAction SilentlyContinue
             if (!$thisUser) {
                 try {
-                    New-MailContact -Name $item.name -ExternalEmailAddress $item.ExternalEmailAddress -DisplayName $item.name -FirstName $item.firstName -LastName $item.lastName
+                    New-MailContact -Name $item.name -ExternalEmailAddress $item.ExternalEmailAddress -DisplayName $item.name -FirstName $item.firstName -LastName $item.lastName -ErrorAction stop
                     $message = $item.name + " has been created."
                     Write-Host $message
-                    Write-Log -Message $message -Path $csvFolder"\Log_BulkNew-MailContact-"$currentTime".log" -Level Error
+                    Write-Log -Message $message -Path $csvFolder"\Log_BulkNew-MailContact-"$currentTime".log"
                 } catch {
                     Write-Log -Message $_ -Path $csvFolder"\Log_BulkNew-MailContact-"$currentTime".log" -Level Error
                 }
@@ -333,7 +431,7 @@ function BulkNew-MailContact {
             } else {
                 $message = "The contact " + $item.name + " already exists. skipping..."
                 Write-Host $message
-                Write-Log -Message $message -Path $csvFolder"\Log_BulkNew-MailContact-"$currentTime".log" -Level Error
+                Write-Log -Message $message -Path $csvFolder"\Log_BulkNew-MailContact-"$currentTime".log" -Level Warn
             }
         }
 	}
@@ -363,7 +461,12 @@ function BulkUpdate-ProxyAddresses { ## HERE
 	)
 	process {
         # import the user list csv to a variable users
-        $mailboxes = import-csv $CsvLocation
+        try {
+            $mailboxes = import-csv $CsvLocation
+        } catch {
+           Write-Warning "The csv file does not exist. Please try again."
+           return 
+        }
         $currentTime = Get-CurrentDateString
 		
 		# for each user in users
@@ -407,13 +510,20 @@ function BulkUpdate-ProxyAddresses { ## HERE
                 }
                 
                 # apply it to the mailbox
-                $proxyAddresses
-                Set-Mailbox -Identity $thisMailbox.identity -EmailAddresses $proxyAddresses
+                try {
+                    Set-Mailbox -Identity $thisMailbox.identity -EmailAddresses $proxyAddresses -ErrorAction stop
+                } catch {
+                    Write-Log -Message $_ -Path $csvFolder"\Log_BulkNew-MailContact-"$currentTime".log" -Level Error
+                }
+                
             } else {
                 Write-Host ("The mailbox " + $mailbox.UserPrincipalName + " does not exist. skipping...") -ForegroundColor red
             }
         }
 	}
+    end {
+        Write-host "The process has been finished. Log has been saved in Log_BulkUpdate-ProxyAddresses-"$currentTime".log" -ForegroundColor Yellow
+    }
 }
 
 
@@ -426,6 +536,7 @@ function BulkSet-Mailboxes {
         ===List of Properties(column) in CSV===
         UserPrincipalName(required)
         ForwardingSMTPAddress(required)
+        TODO : will need to add more attributes available
 		
 	.PARAMETER CsvLocation
 	 	Location of the CSV file of users you want to import
@@ -437,7 +548,13 @@ function BulkSet-Mailboxes {
 	)
 	process {
         # import the user list csv to a variable users
-        $mailboxes = import-csv $CsvLocation
+        try {
+            $mailboxes = import-csv $CsvLocation
+        } catch {
+           Write-Warning "The csv file does not exist. Please try again."
+           return 
+        }
+        $currentTime = Get-CurrentDateString
 		
 		# for each user in users
         foreach ($mailbox in $mailboxes)
@@ -445,14 +562,22 @@ function BulkSet-Mailboxes {
             $thisMailbox = Get-Mailbox $mailbox.UserPrincipalName -ErrorAction SilentlyContinue
             if ($thisMailbox) {
                 if ($mailbox.ForwardingSMTPAddress) {
-                    Write-Host ("updating attributes for " + $thisMailbox.displayname)
-                    Set-Mailbox -Identity $thisMailbox.identity -ForwardingSmtpAddress $mailbox.forwardingSMTPAddress
+                    try {
+                        Set-Mailbox -Identity $thisMailbox.identity -ForwardingSmtpAddress $mailbox.forwardingSMTPAddress -ErrorAction stop
+                    } catch {
+                        Write-Log -Message $_ -Path $csvFolder"\Log_BulkNew-MailContact-"$currentTime".log" -Level Error
+                    }
                 } 
             } else {
-                Write-Host ("The mailbox " + $mailbox.UserPrincipalName + " does not exist. skipping...")
+                $message = "The contact " + $mailbox.UserPrincipalName + " already exists. skipping..."
+                Write-Host $message
+                Write-Log -Message $message -Path $csvFolder"\Log_BulkNew-MailContact-"$currentTime".log" -Level Warn
             }
         }
 	}
+    end {
+        Write-host "The process has been finished. Log has been saved in Log_BulkSet-Mailboxes-"$currentTime".log" -ForegroundColor Yellow
+    }
 }
 
 
@@ -478,6 +603,8 @@ function Check-MailboxExistence {
         [string]$CsvLocation
 	)
 	process {
+        $currentTime = Get-CurrentDateString
+
         # import the user list csv to a variable users
         try {
             $mailboxes = import-csv $CsvLocation
@@ -509,9 +636,12 @@ function Check-MailboxExistence {
             Write-Host ("Done. Total $count mailbox(es) is(are) not in Exchange Online. The list has been saved in $csvFolder\missingMailboxes.csv") -BackgroundColor Cyan
         }
 	}
+    end {
+        #Write-host "The process has been finished. Log has been saved in Log_Check-MailboxExistence-"$currentTime".log" -ForegroundColor Yellow
+    }
 }
 
-
+function BulkNew-DistributionGroups {}
 
 ######################################
 #                                    #
@@ -525,8 +655,7 @@ function Get-CurrentDateString {
     return $currentTimeString
 }
 
-function Write-Log 
-{ 
+function Write-Log { 
     <# 
     .Synopsis 
        Write-Log writes a message to a specified log file with the current time stamp. 
