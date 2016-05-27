@@ -151,6 +151,7 @@ function BulkNewOrUpdate-MsolUser {
             ## handle other attributes ##
             #wait until the user is populated
                 $UPN = $UserParams.UserPrincipalName
+                $emailUser = Get-User $UPN -ErrorAction SilentlyContinue
                 while (1) {
                     if($emailUser) {
                         $message = "The user $UPN has been created"
@@ -166,7 +167,6 @@ function BulkNewOrUpdate-MsolUser {
 
             # max company attribute is 64, cut it if it is longer than 64
             if ($user.company.length -gt 64) {
-                ## HERE
                 $user.company = $user.company.Substring(0,63)
             }
 
@@ -376,7 +376,66 @@ function BulkReset-MsolPassword {
 }
 
 
-function BulkEmail-UserPassword {} #HERE
+function BulkEmail-UserPassword {
+    <#
+	.SYNOPSIS
+        It will distirbute emails wit user password given in a csv file.
+	.EXAMPLE
+		PS> BulkEmail-UserPassword -CsvLocation 'C:\newpassword.csv'
+        ===List of Properties(column) in CSV===
+        UserPrincipalName(required)
+        password(required)
+		
+	.PARAMETER CsvLocation
+	 	Location of the CSV file of users you want to remove
+	#>
+    [CmdletBinding()]
+	param (
+		[parameter(Mandatory=$true)][string]$CsvLocation
+	)
+	process {
+        # import the user list csv to a variable users
+        try {
+            $users = import-csv $CsvLocation
+        } catch {
+           Write-Warning "The csv file does not exist. Please try again."
+           return 
+        }
+        $csvFolder = $csvLocation.Substring(0, $CsvLocation.LastIndexOf("\"))
+        $currentTime = Get-CurrentDateString
+        
+		# for each user in users
+        foreach ($user in $users)
+        {
+            #send an email to the user
+            $secpasswd = ConvertTo-SecureString ¡°Rions109¡± -AsPlainText -Force
+            $mycreds = New-Object System.Management.Automation.PSCredential (¡°ppark@metrocsg.com¡±, $secpasswd)
+            $date = Get-Date
+            $smtp = "smtp.office365.com" 
+            $to = $user.userPrincipalName
+            $from = "ppark@metrocsg.com" 
+            $subject = "(Important)Your office 365 temporary password."
+            $tempPassword = $user.password
+            $body = "Hello, <b>$to</b><br><br>"
+            $body += "Your Office 365 password is <b>$tempPassword</b><br>"
+            $body += "Please visit <a href='https://login.microsoftonline.com/'>Office 365</a> and sign in using your email address and the temporary password above.<br>"
+            $body += "You will need to change the password to your own one.<br><br>"
+            $body += "If you run into any issues or have a question, please contact ~~~<br><br>"
+            $body += "Email Migration Support Team"
+
+            try {
+                Send-MailMessage -SmtpServer $smtp -To $to -Subject $subject -Credential $mycreds -UseSsl -Port "587" -Body $body -From $from -BodyAsHtml -ErrorAction Stop
+                $message = 'An email has been sent to '+ $to
+                Write-Log -Message $message -Path $csvFolder"\Log_BulkEmail-UserPassword-"$currentTime".log"
+            } catch {
+                Write-Log -Message $_ -Path $csvFolder"\Log_BulkEmail-UserPassword-"$currentTime".log"
+            }
+        }
+	}
+    end {
+        Write-host "The process has been finished. Log has been saved in Log_BulkEmail-UserPassword-"$currentTime".log" -ForegroundColor Yellow
+    }
+}
 
 ######################################
 #                                    #
@@ -441,7 +500,7 @@ function BulkNew-MailContact {
 }
 
 
-function BulkUpdate-ProxyAddresses { ## HERE
+function BulkUpdate-ProxyAddresses {
     <#
 	.SYNOPSIS
         It will update proxy address for Dale Carnegie for mailboxes in a given csv.
