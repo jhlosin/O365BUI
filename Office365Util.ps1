@@ -75,15 +75,15 @@ function BulkNewOrUpdate-MsolUser {
         
         # select option for assigning a license
         while(1) {
-            $EmailNotification = Read-Host 'do you want to assign a license for users?(y/n)'
-            if ($EmailNotification -eq 'y' -or $EmailNotification -eq 'n') {
+            $AssignLicense = Read-Host 'do you want to assign a license for users?(y/n)'
+            if ($AssignLicense -eq 'y' -or $AssignLicense -eq 'n') {
                 break
             } else {
                 Write-Warning "Only y or n is allowed. try again."
             }
         }
         # if you chose y
-        if ($EmailNotification -eq 'y') {
+        if ($AssignLicense -eq 'y') {
             #select a license
             $license = (Get-MsolAccountSku | Out-GridView -Title "Select the license to assign" -PassThru).AccountSkuId
         # else
@@ -288,6 +288,8 @@ function BulkReset-MsolPassword {
 		PS> BulkReset-MsolPassword -CsvLocation 'C:\msolusers.csv'
         ===List of Properties(column) in CSV===
         UserPrincipalName(required)
+        FirstName
+        LastName
 		
 	.PARAMETER CsvLocation
 	 	Location of the CSV file of users you want to remove
@@ -326,7 +328,11 @@ function BulkReset-MsolPassword {
                 if ($forceChangePassword -eq 'y') {
                     try {
                         $password = Set-MsolUserPassword -UserPrincipalName $user.userPrincipalName -ForceChangePassword:$true 
-                        $password | select-object @{label='UserPrincipalName'; Expression={$user.userPrincipalName}}, @{label='password'; Expression={$_}} `
+                        $password | select-object `
+                                        @{label='UserPrincipalName'; Expression={$user.userPrincipalName}} `
+                                        , @{label='FirstName'; Expression={$user.Firstname}} `
+                                        , @{label='LastName'; Expression={$user.LastName}} `
+                                        , @{label='password'; Expression={$_}} `
                             | export-csv MSOLUserNewPasswords.csv -NoTypeInformation -Append
                         $message = 'password for ' + $user.UserPrincipalName +  ' has been reset.'
                         Write-Log -Message $message -Path $csvFolder"\Log_BulkSet-MsolLicense-"$currentTime".log"
@@ -336,7 +342,11 @@ function BulkReset-MsolPassword {
                 } else {
                     try {
                         $password = Set-MsolUserPassword -UserPrincipalName $user.userPrincipalName
-                        $password | select-object @{label='UserPrincipalName'; Expression={$user.userPrincipalName}}, @{label='password'; Expression={$_}} `
+                        $password | select-object `
+                                        @{label='UserPrincipalName'; Expression={$user.userPrincipalName}} `
+                                        , @{label='FirstName'; Expression={$user.Firstname}} `
+                                        , @{label='LastName'; Expression={$user.LastName}} `
+                                        , @{label='password'; Expression={$_}} `
                             | export-csv MSOLUserNewPasswords.csv -NoTypeInformation -Append
                         $message = 'password for ' + $user.UserPrincipalName +  ' has been reset.'
                         Write-Log -Message $message -Path $csvFolder"\Log_BulkSet-MsolLicense-"$currentTime".log"
@@ -350,7 +360,12 @@ function BulkReset-MsolPassword {
                 if ($forceChangePassword -eq 'y') {
                     try {
                         $password = Set-MsolUserPassword -UserPrincipalName $user.userPrincipalName -ForceChangePassword:$true -NewPassword $newPassword
-                        $password | select-object @{label='UserPrincipalName'; Expression={$user.userPrincipalName}}, @{label='password'; Expression={$_}} | export-csv MSOLUserNewPasswords.csv -NoTypeInformation -Append
+                        $password | select-object `
+                                        @{label='UserPrincipalName'; Expression={$user.userPrincipalName}} `
+                                        , @{label='FirstName'; Expression={$user.Firstname}} `
+                                        , @{label='LastName'; Expression={$user.LastName}} `
+                                        , @{label='password'; Expression={$_}} `
+                            | export-csv MSOLUserNewPasswords.csv -NoTypeInformation -Append
                         $message = 'password for ' + $user.UserPrincipalName +  ' has been reset.'
                         Write-Log -Message $message -Path $csvFolder"\Log_BulkSet-MsolLicense-"$currentTime".log"
                     } catch {
@@ -359,7 +374,12 @@ function BulkReset-MsolPassword {
                 } else {
                     try {
                         $password = Set-MsolUserPassword -UserPrincipalName $user.userPrincipalName -NewPassword $newPassword
-                        $password | select-object @{label='UserPrincipalName'; Expression={$user.userPrincipalName}}, @{label='password'; Expression={$_}} | export-csv MSOLUserNewPasswords.csv -NoTypeInformation -Append
+                        $password | select-object `
+                                        @{label='UserPrincipalName'; Expression={$user.userPrincipalName}} `
+                                        , @{label='FirstName'; Expression={$user.Firstname}} `
+                                        , @{label='LastName'; Expression={$user.LastName}} `
+                                        , @{label='password'; Expression={$_}} `
+                            | export-csv MSOLUserNewPasswords.csv -NoTypeInformation -Append
                         $message = 'password for ' + $user.UserPrincipalName +  ' has been reset.'
                         Write-Log -Message $message -Path $csvFolder"\Log_BulkSet-MsolLicense-"$currentTime".log"
                     } catch {
@@ -383,8 +403,10 @@ function BulkEmail-UserPassword {
 	.EXAMPLE
 		PS> BulkEmail-UserPassword -CsvLocation 'C:\newpassword.csv'
         ===List of Properties(column) in CSV===
-        UserPrincipalName(required)
+        UserPrincipalName(required) = recipient Email Address
         password(required)
+        FirstName(required)
+        LastName(required)
 		
 	.PARAMETER CsvLocation
 	 	Location of the CSV file of users you want to remove
@@ -403,26 +425,41 @@ function BulkEmail-UserPassword {
         }
         $csvFolder = $csvLocation.Substring(0, $CsvLocation.LastIndexOf("\"))
         $currentTime = Get-CurrentDateString
-        
+        $getCred = Get-Credential
+
 		# for each user in users
         foreach ($user in $users)
         {
             #send an email to the user
-            $secpasswd = ConvertTo-SecureString ¡°Rions109¡± -AsPlainText -Force
-            $mycreds = New-Object System.Management.Automation.PSCredential (¡°ppark@metrocsg.com¡±, $secpasswd)
+            
+            #$secpasswd = ConvertTo-SecureString ¡°Rions109¡± -AsPlainText -Force
+            $mycreds = New-Object System.Management.Automation.PSCredential ($getCred.UserName, $getCred.Password)
             $date = Get-Date
             $smtp = "smtp.office365.com" 
             $to = $user.userPrincipalName
-            $from = "ppark@metrocsg.com" 
-            $subject = "(Important)Your office 365 temporary password."
+            $from = "EmailService@metrocsg.com" 
+            $subject = "IMPORTANT - Your new Dale Carnegie Office 365 account"
+            $firstName = $user.firstName
             $tempPassword = $user.password
-            $body = "Hello, <b>$to</b><br><br>"
-            $body += "Your Office 365 password is <b>$tempPassword</b><br>"
-            $body += "Please visit <a href='https://login.microsoftonline.com/'>Office 365</a> and sign in using your email address and the temporary password above.<br>"
-            $body += "You will need to change the password to your own one.<br><br>"
-            $body += "If you run into any issues or have a question, please contact ~~~<br><br>"
-            $body += "Email Migration Support Team"
+            $body = @" 
 
+**This message has been sent to all dalecarnegie.com users on behalf of your IT team!**<br><br>
+
+Dear $firstName<br><br>
+
+You are now able to log on to your new Dale Carnegie Office 365 email account.  We are in the process of migrating all of your mail, contacts and calendar entries, so don't expect to see all of your history just yet; but you can now log on and test your user credentials to this new platform.<br><br>
+
+To sign on, open any web browser and go to https://login.microsoftonline.com/<br>
+Your user name is <b>$to</b><br>
+Your temporary password is :  $tempPassword<br><br>
+
+Upon first log-on you will be prompted to enter a unique password.<br><br>
+
+If you run into any issues or have any problems please refer to our education newsletter (sent to you earlier in the week) or reach out to us for assistance.  We are here help, it's in the name  - ithelp@dalecarnegie.com <br><br>
+
+Thank you and welcome to Dale Carnegie's Office 365!<br>
+
+"@
             try {
                 Send-MailMessage -SmtpServer $smtp -To $to -Subject $subject -Credential $mycreds -UseSsl -Port "587" -Body $body -From $from -BodyAsHtml -ErrorAction Stop
                 $message = 'An email has been sent to '+ $to
