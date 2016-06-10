@@ -257,22 +257,24 @@ function BulkSet-MsolLicense {
             $csvFolder = $csvLocation.Substring(0, $CsvLocation.LastIndexOf("\"))
         }
 		# for each user in users
+        $path = "Log_BulkSet-MsolUserLicense-" + $currentTime + ".log"
         foreach ($user in $users)
         {
             $userName = $user.userPrincipalName
             $CsvLocation
             Try {
                 # add the license you selected prior
-                if (!$user.UsageLocation) {
-                    set-MsolUser -UserPrincipalName $userName -UsageLocation US
-                }
+                #if (!$user.UsageLocation) {
+                #    set-MsolUser -UserPrincipalName $userName -UsageLocation US
+                #}
                 Set-MsolUserLicense -UserPrincipalName $userName -AddLicenses $license -ErrorAction SilentlyContinue
 
                 $successMessage = "the user" + $userName + "has been assigned with a license " + $license
-                Write-Log -Message $successMessage -Path ".\Log_BulkSet-MsolLicense-"$currentTime".log"
+                Write-Log -Message $successMessage -Path $path
             } Catch {
                 # if failed, log the error
-                Write-Log -Message ($_).toString -Path ".\Log_BulkRemove-MsolUser-"$currentTime".log" -Level "error"
+                #$path = "Log_BulkRemove-MsolUser-" + $currentTime + ".log"
+                Write-Log -Message $_ -Path $path -Level "error"
             }
         }
 
@@ -327,7 +329,7 @@ function BulkReset-MsolPassword {
             if ($setRandomPassword -eq 'r') {
                 if ($forceChangePassword -eq 'y') {
                     try {
-                        $password = Set-MsolUserPassword -UserPrincipalName $user.userPrincipalName -ForceChangePassword:$true 
+                        $password = Set-MsolUserPassword -UserPrincipalName $user.userPrincipalName -ForceChangePassword:$true -ErrorAction Stop
                         $password | select-object `
                                         @{label='UserPrincipalName'; Expression={$user.userPrincipalName}} `
                                         , @{label='FirstName'; Expression={$user.Firstname}} `
@@ -431,13 +433,11 @@ function BulkEmail-UserPassword {
         foreach ($user in $users)
         {
             #send an email to the user
-            
-            #$secpasswd = ConvertTo-SecureString ¡°Rions109¡± -AsPlainText -Force
             $mycreds = New-Object System.Management.Automation.PSCredential ($getCred.UserName, $getCred.Password)
             $date = Get-Date
             $smtp = "smtp.office365.com" 
             $to = $user.userPrincipalName
-            $from = "EmailService@metrocsg.com" 
+            $from = "DaleCarnegieEmailService@metrocsg.microsoftonline.com" 
             $subject = "IMPORTANT - Your new Dale Carnegie Office 365 account"
             $firstName = $user.firstName
             $tempPassword = $user.password
@@ -451,7 +451,7 @@ You are now able to log on to your new Dale Carnegie Office 365 email account.  
 
 To sign on, open any web browser and go to https://login.microsoftonline.com/<br>
 Your user name is <b>$to</b><br>
-Your temporary password is :  $tempPassword<br><br>
+Your temporary password is :  <b>$tempPassword</b><br><br>
 
 Upon first log-on you will be prompted to enter a unique password.<br><br>
 
@@ -574,37 +574,55 @@ function BulkUpdate-ProxyAddresses {
                 $thisUser = Get-User -Identity $thisMailbox.PrimarySmtpAddress
                 
                 $proxyAddresses = $thisMailbox.EmailAddresses
+                $simplifiedProxyAddresses = $proxyAddresses | %{$_.toLower()}
 
                 # add ones in csv file
                 $csvAliases = $mailbox.alias.split(",")
                 for ($i=0; $i -lt $csvAliases.Length; $i++) {
-                    if ($csvAliases[$i] -and !$proxyAddresses.Contains($csvAliases[$i])) {
+                    $item = "smtp:" + $csvAliases[$i].toLower()
+                    if ($csvAliases[$i] -and !$simplifiedProxyAddresses.Contains($item)) {
                         # only add when not exists
                         $proxyAddresses.add("smtp:"+$csvAliases[$i])
                     }
                 }
+
+                $simplifiedProxyAddresses = $proxyAddresses | %{$_.toLower()}
                 
                 #[string[]]$tempProxy = $proxyAddresses | out-string -stream
 
                 # add additional aliases for dalecarnegie domains
-                $alias1 = "smtp:$(($thisUser.FirstName) +"_" + ($thisUser.lastName))@dalecarnegie.com"
-                $alias2 = "smtp:$(($thisUser.FirstName) +"_" + ($thisUser.lastName))@dale-carnegie.com"
-                $alias3 = "smtp:$(($thisUser.FirstName) +"." + ($thisUser.lastName))@dalecarnegie.edu"
-                $alias4 = "smtp:$(($thisUser.FirstName) +"." + ($thisUser.lastName))@dale-carnegie.com"
-
-                if (!$proxyAddresses.Contains($alias1)) {
+                $firstName = ($thisUser.FirstName).replace(" ","")
+                $lastName = ($thisUser.LastName).replace(" ","")
+                if($firstName) {
+                    $alias1 = ("smtp:$($firstName +"_" + $lastName)@dalecarnegie.com")
+                    $alias2 = ("smtp:$($firstName +"_" + $lastName)@dale-carnegie.com")
+                    $alias3 = ("smtp:$($firstName +"." + $lastName)@dalecarnegie.edu")
+                    $alias4 = ("smtp:$($firstName +"." + $lastName)@dale-carnegie.com")
+                } else {
+                    $alias1 = "smtp:$lastName@dalecarnegie.com"
+                    $alias2 = "smtp:$lastName@dale-carnegie.com"
+                    $alias3 = "smtp:$lastName@dalecarnegie.edu"
+                    $alias4 = "smtp:$lastName@dale-carnegie.com"
+                }
+                #Write-Host "simplifiedProxyAddresses"
+                #$simplifiedProxyAddresses
+                
+                if (!$simplifiedProxyAddresses.Contains($alias1.ToLower())) {
                     $proxyAddresses.Add($alias1)
                 }
-                if (!$proxyAddresses.Contains($alias2)) {
+                if (!$simplifiedProxyAddresses.Contains($alias2.ToLower())) {
                     $proxyAddresses.Add($alias2)
                 }
-                if (!$proxyAddresses.Contains($alias3)) {
+                if (!$simplifiedProxyAddresses.Contains($alias3.ToLower())) {
                     $proxyAddresses.Add($alias3)
                 }
-                if (!$proxyAddresses.Contains($alias4)) {
+                if (!$simplifiedProxyAddresses.Contains($alias4.ToLower())) {
                     $proxyAddresses.Add($alias4)
                 }
-                
+                # remove duplicates if exists
+                $proxyAddresses = $proxyAddresses | Sort-Object | Get-Unique
+                #Write-Host "proxyAddresses"
+                #$proxyAddresses
                 # apply it to the mailbox
                 try {
                     Set-Mailbox -Identity $thisMailbox.identity -EmailAddresses $proxyAddresses -ErrorAction stop
