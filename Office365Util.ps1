@@ -22,7 +22,7 @@ function Disconnect-Office365 {
     #>
     Get-PSSession | Remove-PSSession -Confirm:$false
     Remove-Module MSOnline
-    Import-Module MSOnline    
+    Import-Module MSOnline
 }
 
 ######################################
@@ -56,11 +56,13 @@ function BulkNewOrUpdate-MsolUser {
         Company
 		
 	.PARAMETER CsvLocation
-	 	Location of the CSV file of users you want to import
+	Location of the CSV file of users you want to import
 	#>
     [CmdletBinding()]
 	param (
-		[parameter(Mandatory=$true)][string]$CsvLocation
+		[parameter(Mandatory=$true)]
+        [ValidateScript({ Test-Path -Path $_ -PathType Container })]
+        [string]$CsvLocation
 	)
 	process {
         # import the user list csv to a variable users
@@ -177,9 +179,9 @@ function BulkNewOrUpdate-MsolUser {
                 Set-User -Identity $UPN -Company $company
             }
         }
+        Write-host "The process has been finished. Log has been saved in Log_BulkNewOrUpdate-MsolUser-"$currentTime".log" -ForegroundColor Yellow
 	}
     end {
-        Write-host "The process has been finished. Log has been saved in Log_BulkNewOrUpdate-MsolUser-"$currentTime".log" -ForegroundColor Yellow
     }
 }
 
@@ -467,6 +469,64 @@ Thank you and welcome to Dale Carnegie's Office 365!<br>
             } catch {
                 Write-Log -Message $_ -Path $csvFolder"\Log_BulkEmail-UserPassword-"$currentTime".log"
             }
+        }
+	}
+    end {
+        Write-host "The process has been finished. Log has been saved in Log_BulkEmail-UserPassword-"$currentTime".log" -ForegroundColor Yellow
+    }
+}
+
+function Get-Office365UserInfo {
+    <#
+	.SYNOPSIS
+        xxxx
+	.EXAMPLE
+		PS> Get-Office365UserInfo
+		
+	.PARAMETER xx
+	 	xxx
+	#>
+    [CmdletBinding()]
+	param (
+	)
+	process {
+        try {
+        #get lastLogonTim info for mailboxes later than a selected Date
+        Write-Host "`n`tgetting all Office 365 user information." -ForegroundColor Cyan
+
+
+        $AllMsolUsers = Get-MsolUser -All
+
+        $UserInfo = @()
+        foreach($user in $AllMsolUsers) {
+            $UserInfo += [ordered]@{
+                        'FirstName' = $user.FirstName;
+                        'LastName' = $user.LastName;
+                        'UserPrincipalName' = $user.UserPrincipalName;
+                        'ProxyAddresses' = $user.proxyAddresses;
+                        #PrimarySmtp
+                        #anything else from mailbox info. lke manager, forwarding smtp.
+                        'IsLicensed' = $user.isLicensed;
+                        'fax' = $user.fax;
+                        'Department' = $user.Department;
+                        'Office' = $user.Office;
+                        'MobilePhone' = $user.MobilePhone;
+                        'PhoneNumber' = $user.PhoneNumber;
+                        'DisplayName' =  $user.DisplayName
+                        'StreetAddress' = $user.StreetAddress;
+                        'Title' = $user.Title
+                        'city' = $user.city
+                        'state' = $user.state
+                        'postalCode' = $user.postalCode
+                        'country' = $user.country
+                        'Licenses' = $user.licenses
+                        #'LicensesServices' = ''
+                        
+                    }
+        }
+
+        $UserInfo | % { new-object PSObject -Property $_} | Export-Csv -NoTypeInformation Office365UserInfo.csv
+        } catch {
         }
 	}
     end {
