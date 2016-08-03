@@ -61,7 +61,6 @@ function BulkNewOrUpdate-MsolUser {
     [CmdletBinding()]
 	param (
 		[parameter(Mandatory=$true)]
-        [ValidateScript({ Test-Path -Path $_ -PathType Container })]
         [string]$CsvLocation
 	)
 	process {
@@ -479,60 +478,124 @@ Thank you and welcome to Dale Carnegie's Office 365!<br>
 function Get-Office365UserInfo {
     <#
 	.SYNOPSIS
-        xxxx
+        This will get office 365 user info from the connected tenant.
+        The information it gets is following.
+            # info from get-msoluser
+            'FirstName'
+            'LastName'
+            'DisplayName'
+            'UserPrincipalName'
+            'IsLicensed'
+            'Fax'
+            'Department'
+            'Office'
+            'MobilePhone'
+            'PhoneNumber'
+            'StreetAddress'
+            'Title'
+            'city'
+            'State'
+            'postalCode'
+            'country'
+            'Licenses'
+            'EnabledServices'
+            'DisabledServices'
+            # Info from get-mailbox
+            'PrimarySmtpAddress'
+            'EmailAddresses'
+            'ForwardingAddress'
+            'ForwardingSmtpAddress'
+            'RecipientTypeDetails'
+            'IsMailboxEnabled'
+            'ProhibitSendQuota'
+            # Info from get-recipient
+            'Company'
+            'Manager'
+            'ExternalEmailAddress'
+            'HiddenFromAddressListsEnabled'
+            'RetentionPolicy'
 	.EXAMPLE
 		PS> Get-Office365UserInfo
 		
-	.PARAMETER xx
-	 	xxx
+	.PARAMETER
 	#>
     [CmdletBinding()]
 	param (
 	)
 	process {
         try {
-        #get lastLogonTim info for mailboxes later than a selected Date
-        Write-Host "`n`tgetting all Office 365 user information." -ForegroundColor Cyan
+            #get lastLogonTim info for mailboxes later than a selected Date
+            Write-Host "`n`tgetting all Office 365 user information." -ForegroundColor Cyan
 
+            # put all info in variables
+            $AllMsolUsers = Get-MsolUser -All
+            $AllMailboxes = Get-Mailbox -ResultSize unlimited
+            $AllRecipient = Get-Recipient -ResultSize unlimited
 
-        $AllMsolUsers = Get-MsolUser -All
+            $UserInfo = @()
+            # collect info for each user
+            foreach($User in $AllMsolUsers) {
+            
+                $ThisMailbox = $AllMailboxes | Where-Object {$_.UserPrincipalName -eq $User.UserPrincipalName}
+                $ThisRecipient = $AllRecipient | Where-Object {$_.WindowsLiveId -eq $User.UserPrincipalName}
 
-        $UserInfo = @()
-        foreach($user in $AllMsolUsers) {
-            $UserInfo += [ordered]@{
-                        'FirstName' = $user.FirstName;
-                        'LastName' = $user.LastName;
-                        'UserPrincipalName' = $user.UserPrincipalName;
-                        'ProxyAddresses' = $user.proxyAddresses;
-                        #PrimarySmtp
-                        #anything else from mailbox info. lke manager, forwarding smtp.
-                        'IsLicensed' = $user.isLicensed;
-                        'fax' = $user.fax;
-                        'Department' = $user.Department;
-                        'Office' = $user.Office;
-                        'MobilePhone' = $user.MobilePhone;
-                        'PhoneNumber' = $user.PhoneNumber;
-                        'DisplayName' =  $user.DisplayName
-                        'StreetAddress' = $user.StreetAddress;
-                        'Title' = $user.Title
-                        'city' = $user.city
-                        'state' = $user.state
-                        'postalCode' = $user.postalCode
-                        'country' = $user.country
-                        'Licenses' = $user.licenses
-                        #'LicensesServices' = ''
-                        
+                $EnabledServices = ($user.Licenses | %{$_.ServiceStatus | Where-Object {$_.ProvisioningStatus -eq "Success"}}).ServicePlan.ServiceName | Out-String
+                $DisabledServices = ($user.Licenses | %{$_.ServiceStatus | Where-Object {$_.ProvisioningStatus -eq "Disabled"}}).ServicePlan.ServiceName | Out-String
+
+                if ($ThisMailbox) {
+                    $UserInfo += [ordered]@{
+                            # info from get-msoluser
+                            'FirstName' = $User.FirstName;
+                            'LastName' = $User.LastName;
+                            'DisplayName' =  $User.DisplayName;
+                            'UserPrincipalName' = $User.UserPrincipalName;
+                            'IsLicensed' = $User.IsLicensed;
+                            'Fax' = $User.Fax;
+                            'Department' = $User.Department;
+                            'Office' = $User.Office;
+                            'MobilePhone' = $User.MobilePhone;
+                            'PhoneNumber' = $User.PhoneNumber;
+                            'StreetAddress' = $User.StreetAddress;
+                            'Title' = $User.Title;
+                            'city' = $User.city;
+                            'State' = $User.state;
+                            'postalCode' = $User.postalCode;
+                            'country' = $User.country;
+                            'Licenses' = ($User | Select-Object -ExpandProperty Licenses).AccountSkuId | Out-String;
+                            'EnabledServices' = $EnabledServices;
+                            'DisabledServices' = $DisabledServices;
+                            # Info from get-mailbox
+                            'PrimarySmtpAddress' = $ThisMailbox.PrimarySmtpAddress;
+                            'EmailAddresses' = $ThisMailbox.EmailAddresses;
+                            'ForwardingAddress' = $ThisMailbox.ForwardingAddress;
+                            'ForwardingSmtpAddress' = $ThisMailbox.ForwardingSmtpAddress;
+                            'RecipientTypeDetails' = $ThisMailbox.RecipientTypeDetails;
+                            'IsMailboxEnabled' = $ThisMailbox.IsMailboxEnabled;
+                            'ProhibitSendQuota' = $ThisMailbox.ProhibitSendQuota;
+                            # Info from get-recipient
+                            'Company' = $ThisRecipient.Company;
+                            'Manager' = $ThisRecipient.Manager;
+                            'ExternalEmailAddress' = $ThisRecipient.ExternalEmailAddress;
+                            'HiddenFromAddressListsEnabled' = $ThisRecipient.HiddenFromAddressListsEnabled;
+                            'RetentionPolicy' = $ThisRecipient.RetentionPolicy;
                     }
-        }
+                }
+                
+            }
 
-        $UserInfo | % { new-object PSObject -Property $_} | Export-Csv -NoTypeInformation Office365UserInfo.csv
+            # export the collected information to a csv
+            $UserInfo | % { new-object PSObject -Property $_} | Export-Csv -NoTypeInformation Office365UserInfo.csv
+
+
+            Write-Host "`n`tThe task is done. The output is saved in Office365UserInfo.csv in your current working directory." -ForegroundColor Cyan
+
         } catch {
         }
 	}
     end {
-        Write-host "The process has been finished. Log has been saved in Log_BulkEmail-UserPassword-"$currentTime".log" -ForegroundColor Yellow
     }
 }
+
 
 ######################################
 #                                    #
@@ -815,7 +878,274 @@ function Check-MailboxExistence {
     }
 }
 
-function BulkNew-DistributionGroups {}
+function Get-EOMailboxLogonStatistics {
+    <#
+    .Synopsis
+       Get mailbox login statistics from the connected Exchange Online Session
+    .DESCRIPTION
+       YOu will need to be connected on Exchange Online before you run the cmdlet.
+       The cmdlet will get mailbos statistics for those information below.
+        'DisplayName'
+        'PrimarySMTPAddress'
+        'LastLogonTime'
+        'LastLofOffTime'
+        'TotalItemSize'
+        'ItemCount'
+    .EXAMPLE
+       This example returns mailbox statistics information
+       PS> Get-EOMailboxLogonStatistics | ft -AutoSize
+    .EXAMPLE
+       This example exports the mailbox statistics information to MailboxStat.csv file in the current working folder.
+       PS> Get-EOMailboxLogonStatistics | Export-Csv -NoTypeInformation MailboxStat.csv
+    #>
+
+    [CmdletBinding()]
+    [Alias()]
+    [OutputType([hashtable])]
+    Param()
+
+    Begin
+    {
+    }
+    Process
+    {
+        # put all mailboxes info to a variable
+        Write-Verbose "getting all mailbox information."
+        $AllMailboxes = Get-Mailbox -ResultSize unlimited
+
+        $FinalStatistics = @()
+
+        # for each mailbox
+        foreach ($Mailbox in $AllMailboxes) {
+            $UPN = $Mailbox.UserPrincipalName
+            Write-Verbose "getting the statistics for $UPN"
+
+            # get mailbox statistics
+            $MailboxStatistics = Get-MailboxStatistics -Identity $Mailbox.PrimarySMTPAddress
+            
+            # if it exists(user access it at least once)
+            if($MailboxStatistics) {
+                $FinalStatistics += [ordered]@{
+                    'DisplayName' = $Mailbox.DisplayName;
+                    'PrimarySMTPAddress' = $Mailbox.PrimarySMTPAddress;
+                    'LastLogonTime' = $MailboxStatistics.LastLogOnTime;
+                    'LastLofOffTime' = $MailboxStatistics.LastLogOffTime;
+                    'TotalItemSize' = $MailboxStatistics.TotalItemSize;
+                    'ItemCount' = $MailboxStatistics.ItemCount
+                }
+            } else { # if not, user hasn'e access it yet
+                $FinalStatistics += [ordered]@{
+                    'DisplayName' = $Mailbox.DisplayName;
+                    'PrimarySMTPAddress' = $Mailbox.PrimarySMTPAddress;
+                    'LastLogonTime' = "hasn't been accessed"
+                    'LastLofOffTime' = ''
+                    'TotalItemSize' = ''
+                    'ItemCount' = ''
+                }
+            }
+        }
+        
+        Write-Verbose "sorting the result."
+        return $FinalStatistics | % { new-object PSObject -Property $_} | Sort-Object LastLogonTime -Descending
+    }
+    End
+    {
+    }
+}
+
+function BulkNew-DistributionGroups {
+    <#
+	.SYNOPSIS
+        Creates distribution groups in Exchange Online for ones given in the csv
+	.EXAMPLE
+		PS> BulkNew-DistributionGroups -CsvLocation 'C:\DLs.csv'
+        ===List of Properties(column) in CSV===
+        PrimarySmtpAddress(required)
+        DisplayName(required)
+        Aliases
+        ManagedBy
+        Members(as an email address)
+        or any other attributes(it will be good to have them all when you want to import them using the exported csv)
+		
+	.PARAMETER CsvLocation
+	 	Location of the CSV file of users you want to import
+	#>
+    [CmdletBinding()]
+	param (
+		[parameter(Mandatory=$true)]
+        [string]$CsvLocation
+	)
+	process {
+        $currentTime = Get-CurrentDateString
+
+        # import the DLs in the csv to a variable DLsToImport
+        try {
+            $DLsToImport = import-csv $CsvLocation
+        } catch {
+           Write-Warning "The csv file does not exist. Please try again."
+           return 
+        }
+        $DlsToImport = import-csv $CsvLocation
+        $csvFolder = $csvLocation.Substring(0, $CsvLocation.LastIndexOf("\"))
+
+        # set a manager for ones that do not have managedBy field.
+        $AllMailboxes = Get-Mailbox -ResultSize unlimited
+        $DefaultManager = ($AllMailboxes | Select-Object DisplayName,PrimarySMTPAddress | Out-GridView -Title "Select a default manager for ones that you did not specify in the CSV" -PassThru).PrimarySMTPAddress
+
+		# for each DL in DLsToImport
+        foreach ($DL in $DlsToImport)
+        {
+            # use DefaultManager if manager is not specified.
+            $ManagedBy = if($DL.ManagedBy) { $DL.ManagedBy } else { $DefaultManager }
+            
+            # create a new DL
+            Try {
+                $SuccessMessage = "A new Distribution group has been created: " + $DL.DisplayName 
+                New-DistributionGroup -ManagedBy $ManagedBy -Name $DL.DisplayName -PrimarySmtpAddress $DL.PrimarySMTPAddress -ErrorAction Stop
+                Write-Log -Message $SuccessMessage  -Path $csvFolder"\Log_BulkNew-DistributionGroups-"$currentTime".log"
+            } Catch {
+                Write-Log -Message $_ -Path $csvFolder"\Log_BulkNew-DistributionGroups-"$currentTime".log" -Level Error
+            }
+            
+            # add memebers
+            Try {
+                $Members = $DL.Members -split "," #TODO: test here.
+                foreach($Member in $Members) {
+                    $SuccessMessage = "A memebr " + $Member + " has been added to " + $DL.DisplayName                     
+                    Add-DistributionGroupMember -Identity $DL.PrimarySMTPAddress -Member $Members -BypassSecurityGroupManagerCheck -ErrorAction Stop
+                    Write-Log -Message $SuccessMessage  -Path $csvFolder"\Log_BulkNew-DistributionGroups-"$currentTime".log"
+                }
+            } Catch {
+                Write-Log -Message $_ -Path $csvFolder"\Log_BulkNew-DistributionGroups-"$currentTime".log" -Level Error                
+            }
+
+            # add aliases
+            Try {
+                # put aliases in an array
+                $Alias = $DL.Aliases -split "," #TODO: test here.
+
+                # get the current aliases
+                $EmailAddresses = Get-DistributionGroup -Identity $DL.PrimarySMTPAddress -ErrorAction Stop
+                foreach($Alias in $Aliases) {
+                    $EmailAddresses = $EmailAddresses.Add($Alias) | Get-Unique
+                }
+                
+                $SuccessMessage = "An alias " + $Alias + " has been added to " + $DL.DisplayName                     
+                Set-DistributionGroup -Identity $DL.PrimarySMTPAddress -EmailAddresses $EmailAddresses
+                Write-Log -Message $SuccessMessage  -Path $csvFolder"\Log_BulkNew-DistributionGroups-"$currentTime".log"
+
+            } Catch {
+                Write-Log -Message $_ -Path $csvFolder"\Log_BulkNew-DistributionGroups-"$currentTime".log" -Level Error                
+            }
+        }
+	}
+    end {
+        #Write-host "The process has been finished. Log has been saved in Log_BulkNew-DistributionGroups-"$currentTime".log" -ForegroundColor Yellow
+    }
+}
+
+######################################
+#                                    #
+#       Onprem Exchange Utility      #
+#                                    #
+######################################
+
+function Get-AllMailboxStatistics {
+    <#
+    .Synopsis
+       Get all mailbox statistics from an onprem Exchange server.
+    .DESCRIPTION
+       YOu will need to run it from Exchange Management Shell.
+       The cmdlet will get mailbos statistics for those information below.
+        'DisplayName'
+        'PrimarySMTPAddress'
+        'LastLogonTime'
+        'LastLofOffTime'
+        'TotalItemSize'
+        'ItemCount'
+        'MailboxType'
+        'OU'
+        'UserPrincipalName'
+        'EmailAddresses'
+        'WhenCreated'
+        'InternalForwarding'
+        'SMTPForwarding'
+    .EXAMPLE
+       This example returns mailbox statistics information
+       PS> Get-EOMailboxLogonStatistics | ft -AutoSize
+    .EXAMPLE
+       This example exports the mailbox statistics information to MailboxStat.csv file in the current working folder.
+       PS> Get-EOMailboxLogonStatistics | Export-Csv -NoTypeInformation MailboxStat.csv
+    #>
+
+    [CmdletBinding()]
+    [Alias()]
+    [OutputType([hashtable])]
+    Param()
+
+    Begin
+    {
+    }
+    Process
+    {
+        # put all mailboxes info to a variable
+        Write-Verbose "getting all mailbox information."
+        $AllMailboxes = Get-Mailbox -ResultSize unlimited
+
+        $FinalStatistics = @()
+
+        # for each mailbox
+        foreach ($Mailbox in $AllMailboxes) {
+            $UPN = $Mailbox.UserPrincipalName
+            Write-Verbose "getting the statistics for $UPN"
+
+            # get mailbox statistics
+            $MailboxStatistics = Get-MailboxStatistics -Identity $Mailbox.PrimarySMTPAddress
+            
+            # if it exists(user access it at least once)
+            if($MailboxStatistics) {
+                $FinalStatistics += [ordered]@{
+                    'DisplayName' = $Mailbox.DisplayName
+                    'PrimarySMTPAddress' = $Mailbox.PrimarySMTPAddress
+                    'LastLogonTime' = $MailboxStatistics.LastLogOnTime
+                    'LastLofOffTime' = $MailboxStatistics.LastLogOffTime
+                    'TotalItemSize' = $MailboxStatistics.TotalItemSize
+                    'ItemCount' = $MailboxStatistics.ItemCount
+                    'MailboxType' = $Mailbox.RecipientTypeDetails
+                    'OU' = $Mailbox.OrganizationalUnit
+                    'UserPrincipalName' = $Mailbox.UserPrincipalName
+                    'EmailAddresses' = $Mailbox.EmailAddresses -join ","
+                    'WhenCreated' = $Mailbox.WhenCreated
+                    'InternalForwarding' = $Mailbox.ForwardingAddress
+                    'SMTPForwarding' = $Mailbox.ForwardingSMTPAddress
+                }
+            } else { # if not, user hasn'e access it yet
+                $FinalStatistics += [ordered]@{
+                    'DisplayName' = $Mailbox.DisplayName;
+                    'PrimarySMTPAddress' = $Mailbox.PrimarySMTPAddress;
+                    'LastLogonTime' = "hasn't been accessed"
+                    'LastLofOffTime' = ''
+                    'TotalItemSize' = ''
+                    'ItemCount' = ''
+                    'MailboxType' = $Mailbox.RecipientTypeDetails
+                    'OU' = $Mailbox.OrganizationalUnit
+                    'UserPrincipalName' = $Mailbox.UserPrincipalName
+                    'EmailAddresses' = $Mailbox.EmailAddresses -join ","
+                    'WhenCreated' = $Mailbox.WhenCreated
+                    'InternalForwarding' = $Mailbox.ForwardingAddress
+                    'SMTPForwarding' = $Mailbox.ForwardingSMTPAddress
+                }
+            }
+        }
+        
+        Write-Verbose "sorting the result."
+        return $FinalStatistics | % { new-object PSObject -Property $_} | Sort-Object LastLogonTime -Descending
+    }
+    End
+    {
+    }
+}
+
 
 ######################################
 #                                    #
