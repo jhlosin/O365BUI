@@ -438,27 +438,13 @@ function BulkEmail-UserPassword {
             $date = Get-Date
             $smtp = "smtp.office365.com" 
             $to = $user.userPrincipalName
-            $from = "DaleCarnegieEmailService@metrocsg.microsoftonline.com" 
-            $subject = "IMPORTANT - Your new Dale Carnegie Office 365 account"
+            $from = "fromAddress@youroffice365domain.com" 
+            $subject = "IMPORTANT - This is your subject"
             $firstName = $user.firstName
             $tempPassword = $user.password
             $body = @" 
 
-**This message has been sent to all dalecarnegie.com users on behalf of your IT team!**<br><br>
-
-Dear $firstName<br><br>
-
-You are now able to log on to your new Dale Carnegie Office 365 email account.  We are in the process of migrating all of your mail, contacts and calendar entries, so don't expect to see all of your history just yet; but you can now log on and test your user credentials to this new platform.<br><br>
-
-To sign on, open any web browser and go to https://login.microsoftonline.com/<br>
-Your user name is <b>$to</b><br>
-Your temporary password is :  <b>$tempPassword</b><br><br>
-
-Upon first log-on you will be prompted to enter a unique password.<br><br>
-
-If you run into any issues or have any problems please refer to our education newsletter (sent to you earlier in the week) or reach out to us for assistance.  We are here help, it's in the name  - ithelp@dalecarnegie.com <br><br>
-
-Thank you and welcome to Dale Carnegie's Office 365!<br>
+Body Contents here.
 
 "@
             try {
@@ -713,20 +699,6 @@ function BulkUpdate-ProxyAddresses {
                 
                 #[string[]]$tempProxy = $proxyAddresses | out-string -stream
 
-                # add additional aliases for dalecarnegie domains
-                $firstName = ($thisUser.FirstName).replace(" ","")
-                $lastName = ($thisUser.LastName).replace(" ","")
-                if($firstName) {
-                    $alias1 = ("smtp:$($firstName +"_" + $lastName)@dalecarnegie.com")
-                    $alias2 = ("smtp:$($firstName +"_" + $lastName)@dale-carnegie.com")
-                    $alias3 = ("smtp:$($firstName +"." + $lastName)@dalecarnegie.edu")
-                    $alias4 = ("smtp:$($firstName +"." + $lastName)@dale-carnegie.com")
-                } else {
-                    $alias1 = "smtp:$lastName@dalecarnegie.com"
-                    $alias2 = "smtp:$lastName@dale-carnegie.com"
-                    $alias3 = "smtp:$lastName@dalecarnegie.edu"
-                    $alias4 = "smtp:$lastName@dale-carnegie.com"
-                }
                 #Write-Host "simplifiedProxyAddresses"
                 #$simplifiedProxyAddresses
                 
