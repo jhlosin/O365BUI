@@ -54,6 +54,8 @@ function BulkNewOrUpdate-MsolUser {
         UsageLocation
         Manager 
         Company
+        Office
+        PasswordNeverExpires
 		
 	.PARAMETER CsvLocation
 	Location of the CSV file of users you want to import
@@ -99,18 +101,20 @@ function BulkNewOrUpdate-MsolUser {
                 'FirstName' = $user.FirstName
                 'LastName' = $user.LastName
                 'UserPrincipalName' = $user.UserPrincipalName
-                'fax' = $user.fax
+                'Fax' = $user.fax
                 'Department' = $user.Department
                 'MobilePhone' = $user.MobilePhone
                 'PhoneNumber' = $user.PhoneNumber
                 'DisplayName' =  $user.FirstName + " " + $user.LastName
                 'StreetAddress' = $user.StreetAddress
                 'Title' = $user.Title
-                'city' = $user.city
-                'state' = $user.state
-                'postalCode' = $user.postalCode
-                'country' = $user.country
+                'City' = $user.city
+                'State' = $user.state
+                'PostalCode' = $user.postalCode
+                'Country' = $user.country
                 'UsageLocation' = $user.UsageLocation
+                'Office' = $user.Office
+                'PasswordNeverExpires' = $user.PasswordNeverExpires
             }
 
             #check if this user already exists in MS online
@@ -486,6 +490,7 @@ function Get-Office365UserInfo {
             'Licenses'
             'EnabledServices'
             'DisabledServices'
+            'PasswordNeverExpires'
             # Info from get-mailbox
             'PrimarySmtpAddress'
             'EmailAddresses'
@@ -547,6 +552,7 @@ function Get-Office365UserInfo {
                             'State' = $User.state;
                             'postalCode' = $User.postalCode;
                             'country' = $User.country;
+                            'PasswordNeverExpires' = $User.PasswordNeverExpires
                             'Licenses' = ($User | Select-Object -ExpandProperty Licenses).AccountSkuId | Out-String;
                             'EnabledServices' = $EnabledServices;
                             'DisabledServices' = $DisabledServices;
