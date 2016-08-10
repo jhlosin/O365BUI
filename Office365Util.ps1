@@ -114,7 +114,7 @@ function BulkNewOrUpdate-MsolUser {
                 'Country' = $user.country
                 'UsageLocation' = $user.UsageLocation
                 'Office' = $user.Office
-                'PasswordNeverExpires' = $user.PasswordNeverExpires
+                'PasswordNeverExpires' = [system.convert]::ToBoolean($user.PasswordNeverExpires)
             }
 
             #check if this user already exists in MS online
